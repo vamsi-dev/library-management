@@ -1,0 +1,46 @@
+# This file is the entry point to configure your own services.
+# Files in the packages/ subdirectory configure your dependencies.
+
+# Put parameters here that don't need to change on each machine where the app is deployed
+# https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
+parameters:
+
+services:
+  # default configuration for services in *this* file
+  _defaults:
+    autowire: true # Automatically injects dependencies in your services.
+    autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+
+  # makes classes in src/ available to be used as services
+  # this creates a service per class whose id is the fully-qualified class name
+  App\:
+    resource: "../src/"
+    exclude:
+      - "../src/DependencyInjection/"
+      - "../src/Entity/"
+      - "../src/Kernel.php"
+
+  # add more service definitions when explicit configuration is needed
+  # please note that last definitions always *replace* previous ones# Alias the UserProviderInterface to a specific user provider
+
+  gedmo.mapping.driver.attribute:
+    class: Gedmo\Mapping\Driver\AttributeReader
+
+  gedmo.listener.softdeleteable:
+    class: Gedmo\SoftDeleteable\SoftDeleteableListener
+    tags:
+      - { name: doctrine.event_listener, event: "onFlush" }
+      - { name: doctrine.event_listener, event: "loadClassMetadata" }
+    calls:
+      - [setAnnotationReader, ["@gedmo.mapping.driver.attribute"]]
+
+  # Make sure value objects are not registered as services
+  App\Domain\ValueObject\:
+    resource: "../src/Domain/ValueObject"
+    public: false
+    autowire: false
+    autoconfigure: false
+
+  # Controllers are imported separately to make sure autowiring is enabled
+  # and it's possible to fetch services from the container via constructor injection.
+
