@@ -33,9 +33,27 @@ class UserControllerTest extends WebTestCase
     /**
      * @return void
      */
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->restoreExceptionHandler();
+    }
+
+    /**
+     * @return void
+     */
     public function testGetAllUsers(): void
     {
         $this->client->request(Constants::METHOD_GET, $this->path);
+
+        $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+    }
+
+    public function testGetUserById()
+    {
+        $user = $this->repository->findOneBy(['email.email' => 'user1@example.com']);
+
+        $this->client->request(Constants::METHOD_GET, sprintf('%s%s', $this->path, $user->getId()));
 
         $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
     }
@@ -53,13 +71,18 @@ class UserControllerTest extends WebTestCase
         $this->assertEquals(Constants::MSG_INVALID_ID, $responseContent[Constants::TYPE_MESSAGE]);
     }
 
-    public function testGetUserById()
+    /**
+     * @return void
+     * @throws \JsonException
+     */
+    public function testCreateUser(): void
     {
-        $user = $this->repository->findOneBy(['email.email' => 'user1@example.com']);
+        $this->client->request(Constants::METHOD_POST, $this->path . 'new', [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['name' => 'John Doe', 'email' => 'john.doe.new@example.com', 'password' => 'password123'], JSON_THROW_ON_ERROR));
 
-        $this->client->request(Constants::METHOD_GET, sprintf('%s%s', $this->path, $user->getId()));
-
-        $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+        $this->assertEquals(Response::HTTP_CREATED, $this->client->getResponse()->getStatusCode());
+        $responseContent = json_decode($this->client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertEquals(Constants::MSG_USER_CREATED, $responseContent[Constants::TYPE_STATUS]);
     }
 
     /**
@@ -114,14 +137,18 @@ class UserControllerTest extends WebTestCase
      * @return void
      * @throws \JsonException
      */
-    public function testCreateUser(): void
+    public function testUpdateUser(): void
     {
-        $this->client->request(Constants::METHOD_POST, $this->path . 'new', [], [], ['CONTENT_TYPE' => 'application/json'],
-            json_encode(['name' => 'John Doe', 'email' => 'john.doe.new@example.com', 'password' => 'password123'], JSON_THROW_ON_ERROR));
+        $user = $this->repository->findOneBy(['email.email' => 'user1@example.com']);
 
-        $this->assertEquals(Response::HTTP_CREATED, $this->client->getResponse()->getStatusCode());
-        $responseContent = json_decode($this->client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        $this->assertEquals(Constants::MSG_USER_CREATED, $responseContent[Constants::TYPE_STATUS]);
+        $this->client->request(Constants::METHOD_PUT, sprintf('%s%s', $this->path, $user->getId()), [], [], [
+            'CONTENT_TYPE' => 'application/json'
+        ], json_encode(['name' => 'John Smith', 'email' => 'john.smith.edit@example.com', 'password' => 'newpassword123'
+        ], JSON_THROW_ON_ERROR));
+
+        $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+        $responseContent = json_decode($this->client->getResponse()->getContent(), true, Constants::HTTP_STATUS_512, JSON_THROW_ON_ERROR);
+        $this->assertEquals('User updated!', $responseContent[Constants::TYPE_STATUS]);
     }
 
     /**
@@ -162,18 +189,18 @@ class UserControllerTest extends WebTestCase
      * @return void
      * @throws \JsonException
      */
-    public function testUpdateUser(): void
+    public function testDeleteUser(): void
     {
-        $user = $this->repository->findOneBy(['email.email' => 'user1@example.com']);
+        $user = $this->repository->findOneBy(['email.email' => 'john.smith.edit@example.com']);
 
-        $this->client->request(Constants::METHOD_PUT, sprintf('%s%s', $this->path, $user->getId()), [], [], [
-            'CONTENT_TYPE' => 'application/json'
-        ], json_encode(['name' => 'John Smith', 'email' => 'john.smith.edit@example.com', 'password' => 'newpassword123'
-        ], JSON_THROW_ON_ERROR));
+        $this->client->request(Constants::MSG_USER_DELETED, sprintf('%s%s', $this->path, $user->getId()));
 
         $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
         $responseContent = json_decode($this->client->getResponse()->getContent(), true, Constants::HTTP_STATUS_512, JSON_THROW_ON_ERROR);
-        $this->assertEquals('User updated!', $responseContent[Constants::TYPE_STATUS]);
+        $this->assertEquals(Constants::MSG_USER_DELETED, $responseContent[Constants::TYPE_MESSAGE]);
+
+        $deletedUser = $this->repository->findOneBy(['email.email' => 'john.smith.edit@example.com']);
+        $this->assertNull($deletedUser);
     }
 
     /**
@@ -189,24 +216,6 @@ class UserControllerTest extends WebTestCase
         $this->assertEquals(Response::HTTP_NOT_FOUND, $this->client->getResponse()->getStatusCode());
         $responseContent = json_decode($this->client->getResponse()->getContent(), true, Constants::HTTP_STATUS_512, JSON_THROW_ON_ERROR);
         $this->assertEquals('User not found.', $responseContent[Constants::TYPE_MESSAGE]);
-    }
-
-    /**
-     * @return void
-     * @throws \JsonException
-     */
-    public function testDeleteUser(): void
-    {
-        $user = $this->repository->findOneBy(['email.email' => 'john.smith.edit@example.com']);
-
-        $this->client->request(Constants::MSG_USER_DELETED, sprintf('%s%s', $this->path, $user->getId()));
-
-        $this->assertEquals(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
-        $responseContent = json_decode($this->client->getResponse()->getContent(), true, Constants::HTTP_STATUS_512, JSON_THROW_ON_ERROR);
-        $this->assertEquals(Constants::MSG_USER_DELETED, $responseContent[Constants::TYPE_MESSAGE]);
-
-        $deletedUser = $this->repository->findOneBy(['email.email' => 'john.smith.edit@example.com']);
-        $this->assertNull($deletedUser);
     }
 
     /**
@@ -307,11 +316,5 @@ class UserControllerTest extends WebTestCase
 
             restore_exception_handler();
         }
-    }
-
-    protected function tearDown(): void
-    {
-        parent::tearDown();
-        $this->restoreExceptionHandler();
     }
 }
